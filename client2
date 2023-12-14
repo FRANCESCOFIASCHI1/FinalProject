@@ -1,0 +1,50 @@
+#! /usr/bin/env python3
+# client2
+
+import argparse, logging, os, os.path, sys, struct, socket, threading, time
+from concurrent.futures import ThreadPoolExecutor
+
+# Configurazione dell'indirizzo IP e del numero di porta del server
+HOST = "127.0.0.1"  # Indirizzo IP del server
+PORT = 56697  # Numero di porta del server
+
+def recv_all(conn,n):
+  chunks = b''
+  bytes_recd = 0
+  while bytes_recd < n:
+    chunk = conn.recv(min(n - bytes_recd, 1024))
+    if len(chunk) == 0:
+      raise RuntimeError("socket connection broken")
+    chunks += chunk
+    bytes_recd = bytes_recd + len(chunk)
+  return chunks
+
+# thread che si connettono al server
+# un thread con una connessione per ogni file
+def gestisci_connessione(name_file,host=HOST,port=PORT):
+  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.connect((host, port))
+    s.sendall(("Tipo B").encode())
+    with open(name_file,"r") as file:
+      for linea in file:
+        lun = len(linea)
+        if(lun > 2048):
+          lun = 2048
+          linea = linea[:2047]
+        # assert (lun<2048),"ERRORE Lunghezza"
+        # invio stringa linea al server
+        if not lun == 1:
+          s.sendall(struct.pack("!i",lun))        # invio lunghezza stringa
+          s.sendall(linea.encode())               # invio stringa
+    s.sendall(struct.pack("!i",0))
+
+def main(object_file, host=HOST,port=PORT):
+  with ThreadPoolExecutor(len(object_file)) as exe:
+    for name_file in object_file:
+      exe.submit(gestisci_connessione,name_file)
+
+# gestione degli argomenti da linea di comando
+parser = argparse.ArgumentParser()
+parser.add_argument('arg1', nargs='+')      # posso passare un numero imprecisato di file
+argv = parser.parse_args()
+main(argv.arg1)
